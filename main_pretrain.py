@@ -21,8 +21,11 @@ import torch.backends.cudnn as cudnn
 from torch.utils.tensorboard import SummaryWriter
 import torchvision.transforms as transforms
 import torchvision.datasets as datasets
+from torchvision.datasets import CIFAR10
 
 import timm
+
+from util.pos_embed import interpolate_pos_embed
 
 assert timm.__version__ == "0.3.2"  # version check
 import timm.optim.optim_factory as optim_factory
@@ -42,6 +45,14 @@ def get_args_parser():
     parser.add_argument('--epochs', default=400, type=int)
     parser.add_argument('--accum_iter', default=1, type=int,
                         help='Accumulate gradient iterations (for increasing the effective batch size under memory constraints)')
+    
+    # bootstrap
+    parser.add_argument('--bootstrap_k', default=0, type=int,
+                        help='iteration k of bootstrap, k = 0 means the original mae not save the feature. k = 1 means the original mae but save features.')
+    parser.add_argument('--feature_depth', default=8, type=int,
+                        help='the depth of the feature to save')
+    parser.add_argument('--last_model_checkpoint', default="./MAE-1/pretrain/output_dir/checkpoint-199.pth", type=str,
+                        help='the last model to load')
 
     # Model parameters
     parser.add_argument('--model', default='mae_vit_large_patch16', type=str, metavar='MODEL',
@@ -77,6 +88,8 @@ def get_args_parser():
 
     parser.add_argument('--output_dir', default='./output_dir',
                         help='path where to save, empty for no saving')
+    parser.add_argument('--save_freq', default=20, type=int,
+                        help='The frequency of saving checkpoints')
     parser.add_argument('--log_dir', default='./output_dir',
                         help='path where to tensorboard log')
     parser.add_argument('--device', default='cuda',
@@ -124,8 +137,15 @@ def main(args):
             transforms.RandomResizedCrop(args.input_size, scale=(0.2, 1.0), interpolation=3),  # 3 is bicubic
             transforms.RandomHorizontalFlip(),
             transforms.ToTensor(),
-            transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])])
-    dataset_train = datasets.ImageFolder(os.path.join(args.data_path, 'train'), transform=transform_train)
+            transforms.Normalize(mean=[0.4914, 0.4822, 0.4465], std=[0.2023, 0.1994, 0.2010]) # for CIFAR10
+            # transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]) # for ImageNet
+            ])
+    
+    # dataset_train = datasets.ImageFolder(os.path.join(args.data_path, 'train'), transform=transform_train)
+    dataset_train = CIFAR10(root=args.data_path,
+                      train=True,
+                      download=True,
+                      transform=transform_train)
     print(dataset_train)
 
     if True:  # args.distributed:
@@ -183,18 +203,56 @@ def main(args):
 
     misc.load_model(args=args, model_without_ddp=model_without_ddp, optimizer=optimizer, loss_scaler=loss_scaler)
 
+    # bootstrap : load last model
+    if args.bootstrap_k > 1:
+        last_model = models_mae.__dict__["B"+args.model]()
+        
+        checkpoint = torch.load(args.last_model_checkpoint, map_location='cpu')
+        print("Load pre-trained checkpoint from: %s" % args.last_model_checkpoint)
+        checkpoint_model = checkpoint['model']
+        state_dict = model.state_dict()
+        for k in ['head.weight', 'head.bias']:
+            if k in checkpoint_model and checkpoint_model[k].shape != state_dict[k].shape:
+                print(f"Removing key {k} from pretrained checkpoint")
+                del checkpoint_model[k]
+
+        # interpolate position embedding
+        interpolate_pos_embed(model, checkpoint_model)
+        interpolate_pos_embed(last_model, checkpoint_model)
+
+        # load pre-trained model
+        msg1 = model.load_state_dict(checkpoint_model, strict=False) # initialize with last model weight
+        print(msg1)
+        
+        msg2 = last_model.load_state_dict(checkpoint_model, strict=False)
+        print(msg2)
+
+        last_model.to(device)
+        last_model.eval()
+
+
     print(f"Start training for {args.epochs} epochs")
     start_time = time.time()
     for epoch in range(args.start_epoch, args.epochs):
         if args.distributed:
             data_loader_train.sampler.set_epoch(epoch)
-        train_stats = train_one_epoch(
-            model, data_loader_train,
-            optimizer, device, epoch, loss_scaler,
-            log_writer=log_writer,
-            args=args
-        )
-        if args.output_dir and (epoch % 20 == 0 or epoch + 1 == args.epochs):
+        if args.bootstrap_k > 1:
+            train_stats = train_one_epoch(
+                model, data_loader_train,
+                optimizer, device, epoch, loss_scaler,
+                log_writer=log_writer,
+                args=args,
+                last_model=last_model
+            )
+        else:
+            train_stats = train_one_epoch(
+                model, data_loader_train,
+                optimizer, device, epoch, loss_scaler,
+                log_writer=log_writer,
+                args=args,
+            )
+        
+        if args.output_dir and (epoch % args.save_freq == 0 or epoch + 1 == args.epochs):
             misc.save_model(
                 args=args, model=model, model_without_ddp=model_without_ddp, optimizer=optimizer,
                 loss_scaler=loss_scaler, epoch=epoch)

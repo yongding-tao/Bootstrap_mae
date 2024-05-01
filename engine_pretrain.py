@@ -10,6 +10,8 @@
 # --------------------------------------------------------
 import math
 import sys
+import time
+import datetime
 from typing import Iterable
 
 import torch
@@ -22,7 +24,10 @@ def train_one_epoch(model: torch.nn.Module,
                     data_loader: Iterable, optimizer: torch.optim.Optimizer,
                     device: torch.device, epoch: int, loss_scaler,
                     log_writer=None,
-                    args=None):
+                    args=None,
+                    last_model=None):
+    # 记录当前 epoch 开始的时间
+    epoch_start_time = time.time()
     model.train(True)
     metric_logger = misc.MetricLogger(delimiter="  ")
     metric_logger.add_meter('lr', misc.SmoothedValue(window_size=1, fmt='{value:.6f}'))
@@ -45,7 +50,10 @@ def train_one_epoch(model: torch.nn.Module,
         samples = samples.to(device, non_blocking=True)
 
         with torch.cuda.amp.autocast():
-            loss, _, _ = model(samples, mask_ratio=args.mask_ratio)
+            if args.bootstrap_k <= 1:
+                loss, _, _ = model(samples, mask_ratio=args.mask_ratio)
+            else:
+                loss, _, _ = model(samples, last_model=last_model, mask_ratio=args.mask_ratio)
 
         loss_value = loss.item()
 
@@ -75,6 +83,15 @@ def train_one_epoch(model: torch.nn.Module,
             log_writer.add_scalar('train_loss', loss_value_reduce, epoch_1000x)
             log_writer.add_scalar('lr', lr, epoch_1000x)
 
+    # 计算当前 epoch 的训练时长
+    epoch_time = time.time() - epoch_start_time
+    # 计算剩余 epoch 数
+    remaining_epochs = args.epochs - epoch
+    # 估算剩余训练时长
+    estimated_remaining_time = remaining_epochs * epoch_time
+    # 打印估算的剩余训练时长
+    estimated_remaining_time_str = str(datetime.timedelta(seconds=int(estimated_remaining_time)))
+    print(f"Estimated remaining training time: {estimated_remaining_time_str}")
 
     # gather the stats from all processes
     metric_logger.synchronize_between_processes()

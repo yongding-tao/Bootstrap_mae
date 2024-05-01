@@ -22,6 +22,7 @@ import torch.backends.cudnn as cudnn
 from torch.utils.tensorboard import SummaryWriter
 import torchvision.transforms as transforms
 import torchvision.datasets as datasets
+from torchvision.datasets import CIFAR10
 
 import timm
 
@@ -128,19 +129,43 @@ def main(args):
 
     cudnn.benchmark = True
 
-    # linear probe: weak augmentation
+    # # linear probe: weak augmentation for ImageNet
+    # transform_train = transforms.Compose([
+    #         RandomResizedCrop(224, interpolation=3),
+    #         transforms.RandomHorizontalFlip(),
+    #         transforms.ToTensor(),
+    #         transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])])
+    # transform_val = transforms.Compose([
+    #         transforms.Resize(256, interpolation=3),
+    #         transforms.CenterCrop(224),
+    #         transforms.ToTensor(),
+    #         transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])])
+    
+    # linear probe: weak augmentation for CIFAR10
     transform_train = transforms.Compose([
-            RandomResizedCrop(224, interpolation=3),
-            transforms.RandomHorizontalFlip(),
-            transforms.ToTensor(),
-            transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])])
+        transforms.RandomHorizontalFlip(),
+        transforms.ToTensor(),
+        transforms.Normalize(mean=[0.4914, 0.4822, 0.4465], std=[0.2023, 0.1994, 0.2010])
+    ])
     transform_val = transforms.Compose([
-            transforms.Resize(256, interpolation=3),
-            transforms.CenterCrop(224),
-            transforms.ToTensor(),
-            transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])])
-    dataset_train = datasets.ImageFolder(os.path.join(args.data_path, 'train'), transform=transform_train)
-    dataset_val = datasets.ImageFolder(os.path.join(args.data_path, 'val'), transform=transform_val)
+        transforms.ToTensor(),
+        transforms.Normalize(mean=[0.4914, 0.4822, 0.4465], std=[0.2023, 0.1994, 0.2010])
+    ])
+
+    
+    # dataset_train = datasets.ImageFolder(os.path.join(args.data_path, 'train'), transform=transform_train)
+    # dataset_val = datasets.ImageFolder(os.path.join(args.data_path, 'val'), transform=transform_val)
+    # print(dataset_train)
+    # print(dataset_val)
+    
+    dataset_train = CIFAR10(root=args.data_path,
+                      train=True,
+                      download=True,
+                      transform=transform_train)
+    dataset_val = CIFAR10(root=args.data_path,
+                      train=False,
+                      download=True,
+                      transform=transform_val)
     print(dataset_train)
     print(dataset_val)
 
