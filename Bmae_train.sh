@@ -4,6 +4,7 @@ set -e
 
 # choose GPU
 export CUDA_VISIBLE_DEVICES="${1:-1}"
+# echo "gpu_id: $CUDA_VISIBLE_DEVICES"
 
 # define the network, dataset path, the path to save model and results
 MODEL="mae_Deit_tiny_patch4"  # choose model
@@ -15,11 +16,11 @@ timestamp=$2
 save_dir="$base_path/$timestamp"
 
 # define the save frequency
-SAVE_FREQ=5
+SAVE_FREQ=20 # not save except the last
 
 # hyperparameters
-BATCH_SIZE=256
-EPOCHS_SUM=200
+BATCH_SIZE=$4
+EPOCHS_SUM=200 # follow the requirement
 LR=1e-4
 WEIGHT_DECAY=0.05
 bootstrap_k=${3:-4}

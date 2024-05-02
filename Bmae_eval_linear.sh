@@ -16,8 +16,7 @@ bootstrap_k=${3:-4}
 # timestamp: $(date +"%Y%m%d-%H%M%S")
 timestamp=$2
 base_path="./Bootstrap_MAE/$timestamp"
-load_epoch=49  
-# $((200/bootstrap_k-1))
+load_epoch=$((200/bootstrap_k-1))
 
 OUTPUT_DIR="$base_path/eval_linear/output_dir"
 LOG_DIR="$base_path/eval_linear/log_dir"

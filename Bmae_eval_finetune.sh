@@ -16,7 +16,7 @@ bootstrap_k=${3:-4}
 # timestamp: $(date +"%Y%m%d-%H%M%S")
 timestamp=$2
 base_path="./Bootstrap_MAE/$timestamp"
-load_epoch=49
+load_epoch=$((200/bootstrap_k-1))
 
 # define the path to save models and the log, and the save frequency
 OUTPUT_DIR="$base_path/eval_finetune/output_dir"
