@@ -20,7 +20,6 @@ LOG_DIR="./MAE-1-normPixelLoss/eval_finetune/log_dir"
 BATCH_SIZE=256
 EPOCHS=100 # follow the requirement
 LR=1e-4
-WEIGHT_DECAY=0
 
 # finetuning
 CHECK_POINT="./MAE-1-normPixelLoss/eval_linear/output_dir/checkpoint-99.pth"
@@ -33,7 +32,6 @@ python main_finetune.py \
     --batch_size $BATCH_SIZE \
     --epochs $EPOCHS \
     --lr $LR \
-    --weight_decay $WEIGHT_DECAY \
     --device cuda \
     --nb_classes $NB_CLASSES \
     --finetune $CHECK_POINT \

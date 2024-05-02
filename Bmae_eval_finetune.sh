@@ -27,7 +27,6 @@ LOG_DIR="$base_path/eval_finetune/log_dir"
 BATCH_SIZE=256
 EPOCHS=100 # follow the requirement
 LR=1e-4
-WEIGHT_DECAY=0
 
 # finetuning
 CHECK_POINT="$base_path/MAE-$bootstrap_k/output_dir/checkpoint-$load_epoch.pth"
@@ -40,7 +39,6 @@ python main_finetune.py \
     --batch_size $BATCH_SIZE \
     --epochs $EPOCHS \
     --lr $LR \
-    --weight_decay $WEIGHT_DECAY \
     --device cuda \
     --nb_classes $NB_CLASSES \
     --finetune $CHECK_POINT \
