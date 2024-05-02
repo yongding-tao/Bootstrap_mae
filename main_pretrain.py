@@ -173,7 +173,7 @@ def main(args):
     )
     
     # define the model
-    model = models_mae.__dict__[args.model](norm_pix_loss=args.norm_pix_loss)
+    model = models_mae.__dict__[args.model](norm_pix_loss=args.norm_pix_loss, bootstrap_k=args.bootstrap_k) # debug not write bootstrap_k=arg.bootstrap_k
 
     model.to(device)
 
