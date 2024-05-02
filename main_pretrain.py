@@ -226,8 +226,26 @@ def main(args):
         
         msg2 = last_model.load_state_dict(checkpoint_model, strict=False)
         print(msg2)
+        
+        # # 在加载模型到设备之前记录显存使用情况
+        # initial_memory_allocated = torch.cuda.memory_allocated(device)
+        # initial_memory_reserved = torch.cuda.memory_reserved(device)
 
+        # 将模型加载到 GPU 设备
         last_model.to(device)
+
+        # # 在加载模型到设备之后记录显存使用情况
+        # final_memory_allocated = torch.cuda.memory_allocated(device)
+        # final_memory_reserved = torch.cuda.memory_reserved(device)
+
+        # # 计算加载模型过程中显存变化
+        # allocated_difference = final_memory_allocated - initial_memory_allocated
+        # reserved_difference = final_memory_reserved - initial_memory_reserved
+
+        # print(f"显存分配变化: {allocated_difference / 1024**2:.2f} MB")
+        # print(f"显存保留变化: {reserved_difference / 1024**2:.2f} MB")
+        
+        # last_model.to(device)
         last_model.eval()
 
 

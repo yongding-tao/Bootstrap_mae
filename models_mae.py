@@ -61,7 +61,7 @@ class MaskedAutoencoderViT(nn.Module):
 
         self.decoder_norm = norm_layer(decoder_embed_dim)
         self.decoder_pred = nn.Linear(decoder_embed_dim, patch_size**2 * in_chans, bias=True) # decoder to patch
-        self.down2feature = nn.Linear(patch_size**2+1, int(patch_size**2*self.mask_ratio+1), bias=True)
+        self.down2feature = nn.Linear(int(img_size/patch_size)**2+1, int((img_size/patch_size)**2*(1-self.mask_ratio)+1), bias=True)
         self.decoder_feature = nn.Linear(decoder_embed_dim, embed_dim, bias=True)
         # --------------------------------------------------------------------------
 
@@ -209,14 +209,14 @@ class MaskedAutoencoderViT(nn.Module):
         if self.bootstrap_k <= 1: # 0 or 1
             x = self.decoder_pred(x) # for original image pixel reconstruction
             # print('pos 4 : x.shape', x.shape) # [256, 65, 48]
+            # remove cls token
+            x = x[:, 1:, :]
         else: # self.bootstrap_k > 1 
             x = x.transpose(1, 2)
             x = self.down2feature(x)
             x = x.transpose(1, 2)
             x = self.decoder_feature(x)
-
-        # remove cls token
-        x = x[:, 1:, :]
+            # print(f"pos2 {x.shape}") # [N, 17, 192]
 
         return x
 
@@ -251,7 +251,7 @@ class MaskedAutoencoderViT(nn.Module):
     def forward(self, imgs, last_model=None, mask_ratio=0.75):
         # print("imgs.shape: ", imgs.shape) # N, C, H, W : [256, 3, 32, 32]
         latent, mask, ids_restore = self.forward_encoder(imgs, mask_ratio)
-        # print("latent.shape: ", latent.shape)
+        # print("latent.shape: ", latent.shape) # N, (patch_num)*mask_ratio+1, embed_dim : [256, 17, 192]
         # print("mask.shape: ", mask.shape) # [256, 64] 64 = (32/4)**2 is the number of tokens
         
         pred = self.forward_decoder(latent, ids_restore)  # [N, L, p*p*3] or bootstrap_k>1 :[N, L*mask_ratio, embed_dim]
@@ -259,7 +259,38 @@ class MaskedAutoencoderViT(nn.Module):
         if self.bootstrap_k <= 1:
             loss = self.forward_loss(imgs, pred, mask)
         else: # self.bootstrap_k > 1
-            loss = self.Bforward_loss(last_model(imgs), pred)
+            # print("pos 1:", last_model(imgs).shape) # [256, 65, 96]
+            
+            # 记录执行前的显存使用情况
+            # memory_allocated_before = torch.cuda.memory_allocated()  # 已分配的显存
+            # memory_reserved_before = torch.cuda.memory_reserved()  # 保留的显存
+            
+            # # 执行相关操作前的显存使用情况
+            # print(f"Before Bforward_loss:")
+            # print(f"Memory Allocated: {memory_allocated_before / (1024 ** 2):.2f} MB")
+            # print(f"Memory Reserved: {memory_reserved_before / (1024 ** 2):.2f} MB")
+            
+            feature = last_model(imgs, mask)
+            # print("feature.shape ", feature.shape)
+            # print("pred.shape ", pred.shape)
+            
+            loss = self.Bforward_loss(last_model(imgs, mask), pred)
+            
+            # # 记录执行后的显存使用情况
+            # memory_allocated_after = torch.cuda.memory_allocated()  # 已分配的显存
+            # memory_reserved_after = torch.cuda.memory_reserved()  # 保留的显存
+            
+            # # 执行相关操作后的显存使用情况
+            # print(f"After Bforward_loss:")
+            # print(f"Memory Allocated: {memory_allocated_after / (1024 ** 2):.2f} MB")
+            # print(f"Memory Reserved: {memory_reserved_after / (1024 ** 2):.2f} MB")
+            
+            # # 可以计算显存使用的变化
+            # memory_allocated_diff = memory_allocated_after - memory_allocated_before
+            # memory_reserved_diff = memory_reserved_after - memory_reserved_before
+            
+            # print(f"Change in Memory Allocated: {memory_allocated_diff / (1024 ** 2):.2f} MB")
+            # print(f"Change in Memory Reserved: {memory_reserved_diff / (1024 ** 2):.2f} MB")
         return loss, pred, mask
 
 
@@ -346,40 +377,66 @@ class ViTencoder4feature(nn.Module):
             nn.init.constant_(m.weight, 1.0)
 
     def masking(self, x, mask): # to be test
+        '''
+        x: N, L, D
+        mask: N, L
+        return x_masked: N, L*mask_ratio, D
+        '''
         # mask the x use the same mask as this epoch
-        # 创建选择器
-        indices = torch.nonzero(mask == 0, as_tuple=False)[:, 1]  # 获取选择器张量
-
-        # 使用选择器在轴1上选择 x
-        x_masked = torch.index_select(x, dim=1, index=indices)
+        mask = mask.bool()
+        mask = mask.unsqueeze(-1).expand_as(x)
+        # print((~mask).shape)
+        x_masked = x[~mask].reshape(x.shape[0], -1, x.shape[2])
+        # print("x_masked:", x_masked.shape)
         return x_masked
         
 
     def forward_encoder(self, x, mask):
+
+        # 执行相关操作前的显存使用情况
+        # print(f"pos1:")
+        # print(f"Memory Allocated: {torch.cuda.memory_allocated() / (1024 ** 2):.2f} MB")
+        # print(f"Memory Reserved: {torch.cuda.memory_reserved() / (1024 ** 2):.2f} MB")
         x = self.patch_embed(x)
         
         # add pos embed w/o cls token
         x = x + self.pos_embed[:, 1:, :]
+        # print(f"pos0 {x.shape}")
 
         # masking: length -> length * mask_ratio
         x = self.masking(x, mask)
+        # print(f"pos1 {x.shape}")
 
         # append cls token
         cls_token = self.cls_token + self.pos_embed[:, :1, :]
         cls_tokens = cls_token.expand(x.shape[0], -1, -1)
         x = torch.cat((cls_tokens, x), dim=1)
+        
+        # 执行相关操作前的显存使用情况
+        # print(f"pos2:")
+        # print(f"Memory Allocated: {torch.cuda.memory_allocated() / (1024 ** 2):.2f} MB")
+        # print(f"Memory Reserved: {torch.cuda.memory_reserved() / (1024 ** 2):.2f} MB")
 
         # apply Transformer blocks
+        # print(f"pos2 {x.shape}")
         for depth_i, blk in enumerate(self.blocks):
             x = blk(x)
+            # print(f"after Transformer blocks {depth_i+1}:")
+            # print(f"Memory Allocated: {torch.cuda.memory_allocated() / (1024 ** 2):.2f} MB")
+            # print(f"Memory Reserved: {torch.cuda.memory_reserved() / (1024 ** 2):.2f} MB")
             if(depth_i+1 == self.feature_depth):
                 break
+        
+        # print(f"pos3:")
+        # print(f"Memory Allocated: {torch.cuda.memory_allocated() / (1024 ** 2):.2f} MB")
+        # print(f"Memory Reserved: {torch.cuda.memory_reserved() / (1024 ** 2):.2f} MB")
+        
         x = self.norm(x)
 
         return x
 
-    def forward(self, img):
-        encoder_feature = self.forward_encoder(img)
+    def forward(self, img, mask):
+        encoder_feature = self.forward_encoder(img, mask)
         return encoder_feature
 
 def mae_vit_base_patch16_dec512d8b(**kwargs):
