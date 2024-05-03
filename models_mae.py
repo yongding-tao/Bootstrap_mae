@@ -376,7 +376,7 @@ class ViTencoder4feature(nn.Module):
             nn.init.constant_(m.bias, 0)
             nn.init.constant_(m.weight, 1.0)
 
-    def masking(self, x, mask): # to be test
+    def masking(self, x, mask):
         '''
         x: N, L, D
         mask: N, L
