@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Parse options using getopt
-TEMP=$(getopt -o "" --long gpu_id:,batch_size:,base_path:,use_ema:,feature_depth: -- "$@")
+TEMP=$(getopt -o "" --long gpu_id:,batch_size:,base_path:,use_ema:,feature_depth:,bootstrap_k: -- "$@")
 if [ $? != 0 ]; then
     echo "Error parsing options."
     exit 1
@@ -92,11 +92,11 @@ WEIGHT_DECAY=0.05
 EPOCHS=$((epochs_sum/bootstrap_k))
 
 for k in $(seq 1 $bootstrap_k); do
-    OUTPUT_DIR="$basepath/MAE-$k/output_dir"
-    LOG_DIR="$basepath/MAE-$k/log_dir"
+    OUTPUT_DIR="$base_path/MAE-$k/output_dir"
+    LOG_DIR="$base_path/MAE-$k/log_dir"
     pre_k=$((k-1))
     epochs_to_load=$((EPOCHS-1))
-    check_point="$basepath/MAE-$pre_k/output_dir/checkpoint-$epochs_to_load.pth"
+    check_point="$base_path/MAE-$pre_k/output_dir/checkpoint-$epochs_to_load.pth"
 
     python main_pretrain.py \
     --model $MODEL \

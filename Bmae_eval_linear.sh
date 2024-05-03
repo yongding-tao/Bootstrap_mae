@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Parse options using getopt
-TEMP=$(getopt -o "" --long gpu_id:,batch_size:,base_path:,use_ema: -- "$@")
+TEMP=$(getopt -o "" --long gpu_id:,batch_size:,base_path:,use_ema:,bootstrap_k: -- "$@")
 if [ $? != 0 ]; then
     echo "Error parsing options."
     exit 1
@@ -14,7 +14,7 @@ eval set -- "$TEMP"
 gpu_id=0
 batch_size=256
 use_ema=false
-epochs_sum=200 # follow the requirement
+epochs_sum=200 # follow the requirement, for pretrain
 bootstrap_k=4
 
 # Process options
@@ -65,7 +65,7 @@ done
 echo "Using GPU ID: $gpu_id"
 echo "Pretrain using batch size: $batch_size"
 echo "base_path: $base_path"
-echo "bootstrap_k: $boot_strap"
+echo "bootstrap_k: $bootstrap_k"
 
 # choose GPU
 export CUDA_VISIBLE_DEVICES=$gpu_id
@@ -77,7 +77,7 @@ IMG_SIZE=32
 NB_CLASSES=10
 
 # bootstrap
-load_epoch=$((200/bootstrap_k-1))
+load_epoch=$(($epochs_sum/bootstrap_k-1))
 
 OUTPUT_DIR="$base_path/eval_linear/output_dir"
 LOG_DIR="$base_path/eval_linear/log_dir"

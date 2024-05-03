@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Parse options using getopt
-TEMP=$(getopt -o "" --long gpu_id:,batch_size:,base_path:,use_ema: -- "$@")
+TEMP=$(getopt -o "" --long gpu_id:,batch_size:,base_path:,use_ema:,bootstrap_k: -- "$@")
 if [ $? != 0 ]; then
     echo "Error parsing options."
     exit 1
@@ -65,7 +65,7 @@ done
 echo "Using GPU ID: $gpu_id"
 echo "Pretrain using batch size: $batch_size"
 echo "base_path: $base_path"
-echo "bootstrap_k: $boot_strap"
+echo "bootstrap_k: $bootstrap_k"
 
 # choose GPU
 export CUDA_VISIBLE_DEVICES=$gpu_id
@@ -77,7 +77,7 @@ IMG_SIZE=32
 NB_CLASSES=10
 
 # bootstrap
-load_epoch=$((200/bootstrap_k-1))
+load_epoch=$(($epochs_sum/bootstrap_k-1))
 
 # define the path to save models and the log, and the save frequency
 OUTPUT_DIR="$base_path/eval_finetune/output_dir"
@@ -85,7 +85,6 @@ LOG_DIR="$base_path/eval_finetune/log_dir"
 # SAVE_FREQ=20
 
 # hyperparameters
-BATCH_SIZE=256
 EPOCHS=100 # follow the requirement
 LR=1e-4
 
