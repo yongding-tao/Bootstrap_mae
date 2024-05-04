@@ -11,8 +11,8 @@ This is a bootstrapped version of the paper [Masked Autoencoders Are Scalable Vi
 
 You can run the shell in ./Experiment_Settints to conduct the experiment.
 
-<!-- ### Catalog
+Like running : 
 
-- [x] Visualization demo
-- [x] Pre-trained checkpoints + fine-tuning code
-- [x] Pre-training code -->
+```
+sh ./Experiment_Settings/run_Bootstrap_MAE_onlyloadencoder_setting1.sh
+```
