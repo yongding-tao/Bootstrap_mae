@@ -25,7 +25,8 @@ def train_one_epoch(model: torch.nn.Module,
                     device: torch.device, epoch: int, loss_scaler,
                     log_writer=None,
                     args=None,
-                    last_model=None):
+                    last_model=None,
+                    ema=None):
     # 记录当前 epoch 开始的时间
     epoch_start_time = time.time()
     model.train(True)
@@ -64,6 +65,8 @@ def train_one_epoch(model: torch.nn.Module,
         loss /= accum_iter
         loss_scaler(loss, optimizer, parameters=model.parameters(),
                     update_grad=(data_iter_step + 1) % accum_iter == 0)
+        if args.use_ema:
+            ema.update()
         if (data_iter_step + 1) % accum_iter == 0:
             optimizer.zero_grad()
 

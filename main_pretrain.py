@@ -25,6 +25,7 @@ from torchvision.datasets import CIFAR10
 
 import timm
 
+from util.ema import EMA
 from util.pos_embed import interpolate_pos_embed
 
 assert timm.__version__ == "0.3.2"  # version check
@@ -45,6 +46,12 @@ def get_args_parser():
     parser.add_argument('--epochs', default=400, type=int)
     parser.add_argument('--accum_iter', default=1, type=int,
                         help='Accumulate gradient iterations (for increasing the effective batch size under memory constraints)')
+    
+    # EMA
+    parser.add_argument('--use_ema', action='store_true',
+                        help='use EMA algorithm to train model weight')
+    parser.add_argument('--half_life', default=0.99, type=float,
+                        help='the half-life of EMA for model weight')
     
     # bootstrap
     parser.add_argument('--bootstrap_k', default=0, type=int,
@@ -289,6 +296,12 @@ def main(args):
         
         # last_model.to(device)
         last_model.eval()
+        
+    ema = None
+    if args.use_ema:
+        # EMA init
+        ema = EMA(model, args.half_life)
+        ema.register()
 
 
     print(f"Start training for {args.epochs} epochs")
@@ -302,7 +315,8 @@ def main(args):
                 optimizer, device, epoch, loss_scaler,
                 log_writer=log_writer,
                 args=args,
-                last_model=last_model
+                last_model=last_model,
+                ema=ema
             )
         else:
             train_stats = train_one_epoch(
@@ -310,12 +324,17 @@ def main(args):
                 optimizer, device, epoch, loss_scaler,
                 log_writer=log_writer,
                 args=args,
+                ema=ema
             )
         
         if args.output_dir and (epoch % args.save_freq == 0 or epoch + 1 == args.epochs):
+            if args.use_ema:
+                ema.apply_shadow()
             misc.save_model(
                 args=args, model=model, model_without_ddp=model_without_ddp, optimizer=optimizer,
                 loss_scaler=loss_scaler, epoch=epoch)
+            if args.use_ema:
+                ema.restore()
 
         log_stats = {**{f'train_{k}': v for k, v in train_stats.items()},
                         'epoch': epoch,}
