@@ -9,7 +9,7 @@ This is a bootstrapped version of the paper [Masked Autoencoders Are Scalable Vi
 
 * This repo is a modification on the [MAE repo](https://github.com/facebookresearch/mae). Installation and preparation follow that repo.
 
-To be done.
+You can run the shell in ./Experiment_Settints to conduct the experiment.
 
 <!-- ### Catalog
 
