@@ -53,6 +53,8 @@ def get_args_parser():
                         help='the depth of the feature to save')
     parser.add_argument('--last_model_checkpoint', default="./MAE-1/pretrain/output_dir/checkpoint-199.pth", type=str,
                         help='the last model to load')
+    parser.add_argument('--only_load_encoder', action='store_true',
+                        help='only the encoder weight of last model')
 
     # Model parameters
     parser.add_argument('--model', default='mae_vit_large_patch16', type=str, metavar='MODEL',
@@ -216,16 +218,56 @@ def main(args):
                 print(f"Removing key {k} from pretrained checkpoint")
                 del checkpoint_model[k]
 
+        # load pre-trained model
+        if not args.only_load_encoder or args.bootstrap_k > 2:
+            msg1 = model.load_state_dict(checkpoint_model, strict=False) # initialize with last model weight
+            print(msg1)
+        else: # only load encoder of MAE-1 for the MAE-2
+            # 初始化一个字典来存储encoder部分的权重
+            encoder_weights = {}
+
+            # 根据模型中的模块和预训练权重中的键名筛选出encoder部分的权重
+            # 这里我们根据 'patch_embed.', 'pos_embed', 'blocks.', 'norm.' 等模块前缀来筛选
+            for key, value in checkpoint_model.items():
+                if key.startswith('patch_embed.'):
+                    # 去除 'patch_embed.' 前缀
+                    new_key = key[len('patch_embed.'):]
+                    encoder_weights[new_key] = value
+                elif key == 'pos_embed':
+                    encoder_weights['pos_embed'] = value
+                elif key.startswith('blocks.'):
+                    # 去除 'blocks.' 前缀
+                    new_key = key[len('blocks.'):]
+                    # 修改键名以适应 Block 模块的键名
+                    layer_index, sub_key = new_key.split('.', 1)
+                    layer_index = int(layer_index)
+                    if layer_index not in encoder_weights:
+                        encoder_weights[layer_index] = {}
+                    encoder_weights[layer_index][sub_key] = value
+                elif key.startswith('norm.'):
+                    # 去除 'norm.' 前缀
+                    new_key = key[len('norm.'):]
+                    encoder_weights[f'norm.{new_key}'] = value
+
+            # 加载encoder部分的权重到模型中
+            model.patch_embed.load_state_dict({k: encoder_weights[k] for k in encoder_weights if k in model.patch_embed.state_dict()})
+            model.pos_embed.data.copy_(encoder_weights['pos_embed'])
+            model.norm.load_state_dict({k: encoder_weights[f'norm.{k}'] for k in model.norm.state_dict()})
+
+            # 遍历模型的blocks部分，逐个加载块（Block）的权重
+            for i, block in enumerate(model.blocks):
+                # 提取每个Block的权重
+                block_state_dict = encoder_weights.get(i, {})
+                # 确保字典不为空
+                if block_state_dict:
+                    # 加载权重
+                    block.load_state_dict(block_state_dict)
+        msg2 = last_model.load_state_dict(checkpoint_model, strict=False)
+        print(msg2)
+        
         # interpolate position embedding
         interpolate_pos_embed(model, checkpoint_model)
         interpolate_pos_embed(last_model, checkpoint_model)
-
-        # load pre-trained model
-        msg1 = model.load_state_dict(checkpoint_model, strict=False) # initialize with last model weight
-        print(msg1)
-        
-        msg2 = last_model.load_state_dict(checkpoint_model, strict=False)
-        print(msg2)
         
         # # 在加载模型到设备之前记录显存使用情况
         # initial_memory_allocated = torch.cuda.memory_allocated(device)

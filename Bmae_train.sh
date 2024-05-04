@@ -84,7 +84,7 @@ DATA_PATH="./CIFAR10"  # the path of CIFAR10
 img_size=32
 
 # define the save frequency
-SAVE_FREQ=20 # not save except the last
+SAVE_FREQ=20
 
 # hyperparameters
 LR=1e-4
@@ -113,5 +113,6 @@ for k in $(seq 1 $bootstrap_k); do
     --bootstrap_k $k \
     --feature_depth $feature_depth \
     --last_model_checkpoint $check_point \
+    --only_load_encoder \
     --norm_pix_loss # forget to add previously
 done
